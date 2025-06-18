@@ -1,27 +1,31 @@
 let body = $response.body;
 let obj = JSON.parse(body);
 
-// DEBUG: Uncomment to log everything to Surge log
-// console.log("Reddit JSON Feed:", JSON.stringify(obj));
+// Set to true to see logs in Surge
+const debug = false;
 
-if (obj.data && Array.isArray(obj.data.children)) {
+if (obj?.data?.children?.length) {
   obj.data.children = obj.data.children.filter(item => {
     const d = item.data || {};
 
-    // Aggressive checks — real ad detection
-    const lowerAuthor = (d.author || "").toLowerCase();
-    const isAd =
-      d.isSponsored ||
-      d.promoted ||
-      d.adserverClickUrl ||
-      d.is_ad ||
-      d.is_created_from_ads_ui ||
-      lowerAuthor === 'promoted' ||
-      (d.post_hint === "link" && d.domain && d.domain.includes("ad")) ||
-      (d.url_overridden_by_dest && d.url_overridden_by_dest.includes("utm_source=reddit"));
+    const author = (d.author || "").toLowerCase();
+    const domain = d.domain || "";
+    const url = d.url_overridden_by_dest || "";
 
-    // DEBUG:
-    // if (isAd) console.log("Filtered ad:", d.title || d.url);
+    const isAd =
+      d.is_ad === true ||
+      d.isSponsored === true ||
+      d.promoted === true ||
+      d.adserverClickUrl ||
+      d.is_created_from_ads_ui === true ||
+      author === "promoted" ||
+      (d.post_category && d.post_category === "advertiser") ||
+      (url.includes("utm_source=reddit")) ||
+      (domain.includes("ad") && d.post_hint === "link");
+
+    if (debug && isAd) {
+      console.log("🔴 Blocked ad:", d.title || url || domain);
+    }
 
     return !isAd;
   });
