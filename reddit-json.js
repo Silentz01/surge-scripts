@@ -1,34 +1,60 @@
-let body = $response.body;
-let obj = JSON.parse(body);
+(function () {
+  // Attempt to parse incoming arguments; use defaults if parsing fails.
+  let options = {};
+  try {
+    options = JSON.parse($argument);
+  } catch (e) {
+    options = { blockPromoted: true, debug: false };
+  }
+  const blockPromoted = options.blockPromoted !== undefined ? options.blockPromoted : true;
+  const debug = options.debug !== undefined ? options.debug : false;
+  
+  if (debug) {
+    console.log("Reddit-json: Options loaded:", options);
+  }
 
-// Set to true to see logs in Surge
-const debug = false;
+  try {
+    // Parse the intercepted response body as JSON.
+    let responseObj = JSON.parse($response.body);
 
-if (obj?.data?.children?.length) {
-  obj.data.children = obj.data.children.filter(item => {
-    const d = item.data || {};
-
-    const author = (d.author || "").toLowerCase();
-    const domain = d.domain || "";
-    const url = d.url_overridden_by_dest || "";
-
-    const isAd =
-      d.is_ad === true ||
-      d.isSponsored === true ||
-      d.promoted === true ||
-      d.adserverClickUrl ||
-      d.is_created_from_ads_ui === true ||
-      author === "promoted" ||
-      (d.post_category && d.post_category === "advertiser") ||
-      (url.includes("utm_source=reddit")) ||
-      (domain.includes("ad") && d.post_hint === "link");
-
-    if (debug && isAd) {
-      console.log("🔴 Blocked ad:", d.title || url || domain);
+    // Check for the expected structure: responseObj.data.children should be an array.
+    if (responseObj && responseObj.data && Array.isArray(responseObj.data.children)) {
+      if (debug) {
+        console.log("Reddit-json: Processing", responseObj.data.children.length, "items.");
+      }
+      
+      // If the blockPromoted option is true, filter out promoted/ads entries.
+      if (blockPromoted) {
+        responseObj.data.children = responseObj.data.children.filter((child) => {
+          // Check if the entry contains ad-related flags. Adjust or add additional flags as needed.
+          if (child && child.data) {
+            if (child.data.promoted === true || child.data.is_ad === true) {
+              if (debug) {
+                console.log("Reddit-json: Filtered out promoted post:", child.data.title || child.data.id);
+              }
+              return false;
+            }
+          }
+          return true;
+        });
+      } else {
+        if (debug) {
+          console.log("Reddit-json: blockPromoted is false, skipping filtering.");
+        }
+      }
+    } else {
+      if (debug) {
+        console.log("Reddit-json: Response structure not as expected, no filtering applied.");
+      }
     }
 
-    return !isAd;
-  });
-}
-
-$done({ body: JSON.stringify(obj) });
+    // Return the modified JSON.
+    $done({ body: JSON.stringify(responseObj) });
+  } catch (err) {
+    // If any error occurs, log it if debug is enabled and return the original body.
+    if (debug) {
+      console.error("Reddit-json: Error processing response:", err);
+    }
+    $done({ body: $response.body });
+  }
+})();
